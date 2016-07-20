@@ -88,7 +88,6 @@ print("Delete old files")
 clearWSLocks(input_shape)
 clearWSLocks(hex_name)
 clearWSLocks(shapefile_directory+output_name)
-#print(clearWSLocks(shapefile_directory))
 for match in glob.glob(hex_name+'.*'):
 	os.remove(match)
 		
@@ -110,12 +109,9 @@ arcpy.CopyFeatures_management(gdb_poly,input_shape)
 clearWSLocks(shapefile_directory+output_name)
 clearWSLocks(input_shape)
 
-# the '.da' cursors were added in 10.1. If running an older Arc version, use the lines without the '.da' instead
 inputCursor = arcpy.UpdateCursor(input_pol)
 hexInCursor = arcpy.InsertCursor(hex_pol)
 fields = ['SHAPE','Hex_ID','AUSPATID','ECOREGION','COA_Name']
-#inputCursor = arcpy.da.UpdateCursor(input_pol, ['FID'] + fields)
-#hexInCursor = arcpy.da.InsertCursor(hex_pol, ['OBJECTID'] + fields)
 
 for inputRow in inputCursor:
 	row = hexInCursor.newRow()
@@ -125,14 +121,6 @@ for inputRow in inputCursor:
 	row.setValue("AUSPATID", inputRow.getValue('AUSPATID'))
 	row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
 	row.setValue("COA_Name", inputRow.getValue('COA_Name'))
-	#row_values = (
-	#	inputRow.getValue('SHAPE'), 
-	#	inputRow.getValue('Hex_ID'), 
-	#	inputRow.getValue('AUSPATID'), 
-	#	inputRow.getValue('ECOREGION'), 
-	#	inputRow.getValue('COA_Name')
-	#)
-	#hexInCursor.insertRow(inputRow)
 	hexInCursor.insertRow(row)
 	
 del row
@@ -159,10 +147,10 @@ for row in dataCursor:
 	
 	if hexId not in reportDict.keys():
 		reportDict[hexId] = {
-			"modField": "",
-			"obsField": "",
-			"habsField": "",
-			"fishField": ""
+			"modField": [],
+			"obsField": [],
+			"habsField": [],
+			"fishField": []
 		}
 		
 	hex = reportDict[hexId]
@@ -173,10 +161,10 @@ for row in dataCursor:
 	#need to test the length of the list (if there's no "(" there's only one element")
 	if len(cleanComName) > 1:
 		if cleanComName[1] == "Modeled Habitat)":
-			hex['modField'] = hex['modField'] + "," + str(specId)
+			hex['modField'].append(specId)
 		else:
 			if cleanComName[1] == "Observed)":
-				hex['obsField'] = hex['obsField'] + "," + str(specId)
+				hex['obsField'].append(specId)
 			else:
 				print("--- Clean Common Name not understood: %s ---" % cleanComName[1])
 				error_count = error_count +1
@@ -187,50 +175,29 @@ for row in dataCursor:
 		#first check to see if it's a habitat (starts with "OCS")
 		habyes = comName[:3]
 		if habyes == "OCS":
-			hex['habsField'] = hex['habsField'] + "," + str(specId)
+			hex['habsField'].append(specId)
 		else:
-			hex['fishField'] = hex['fishField'] + "," + str(specId)
+			hex['fishField'].append(specId)
 		
-	#row = dataCursor.next()
 del dataCursor
 	
-# the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
 hexCursor = arcpy.UpdateCursor(hex_pol)
-#hexRowFields = [hex_id_field,"mod_spec","obs_spec","habitat","fish"]
-#hexCursor = arcpy.da.UpdateCursor(hex_pol,'*')
 
-run_count = 0
 for hexRow in hexCursor:
-	#hex = hexRow[0]
 	hex = hexRow.getValue(hex_id_field)
 	hexDict = reportDict[str(hex)]
-
-	if run_count % 1000 == 0:
-		print("Run count: %s" % run_count)
 	
-	#print (str(hex) + ":" + modField + "\n")
-	#print (str(hex) + ":" + obsField + "\n")
-	#print (str(hex) + ":" + habsField + "\n")
-	#print (str(hex) + ":" + fishField + "\n")
-	
-	#need to strip the , from beggining of each
-	modField = hexDict['modField'].strip( ',' )
-	obsField = hexDict['obsField'].strip( ',' )
-	habsField = hexDict['habsField'].strip( ',' )
-	fishField = hexDict['fishField'].strip( ',' )
+	modField = str(hexDict['modField'])
+	obsField = str(hexDict['obsField'])
+	habsField = str(hexDict['habsField'])
+	fishField = str(hexDict['fishField'])
 	
 	hexRow.setValue("mod_spec", modField)
 	hexRow.setValue("obs_spec", obsField)
 	hexRow.setValue("habitat", habsField)
 	hexRow.setValue("fish", fishField)
-	#hexRow[1] = modField
-	#hexRow[2] = obsField
-	#hexRow[3] = habsField
-	#hexRow[4] = fishField
 
 	hexCursor.updateRow(hexRow)
-	
-	run_count = run_count + 1
 	
 del hexCursor
 
@@ -253,6 +220,5 @@ for match in glob.glob(hex_name+'.*'):
 print("Closing zipfile")
 shapezip.close()
 
-print("Cleanup?")
 del workfiles
 
