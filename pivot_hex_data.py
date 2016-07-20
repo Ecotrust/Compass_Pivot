@@ -25,43 +25,98 @@ The hex polygon feature set should have the appropriate fields to store the resu
 	mod_spec
 	habitats
 	fish
+	
+Running this script:
+	* Update the 'DEFINE' sections of the 'SETTINGS' below
+	* copy hex_template from this dir to 'shapefile_directory' as defined below
+	* Open a project in ArcMap
+	* Open gdb adding the 'gdb_poly' and 'gdb_data' files defined below
+	* open Python Terminal
+	* run `execfile(r'\\neoterra\GIS\projects\ODFWCompass2015\Util\Scripts_Models\Compass_Pivot\pivot_hex_data.py')`
+	* NOTE: the location of the file will change in the above command.
 """
-
 
 # Import arcpy module and check out extension
 import arcpy
 import os
 import time
 import datetime
+import glob
 
 
+### SETTINGS ###
 
+# DEFINE where the spatial data (GDB file and template directory) is located
+shapefile_directory = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\Reporting_Data_GDB\\"
+# DEFINE the name of the GDB
+input_gdb = "ODFW_OCS_ReportingData.gdb"
+# DEFINE the name of the spatial layer in the GDB
+gdb_poly = "WV_Hexagons"
+# DEFINE the name of the tabular data in the GDB
+gdb_data = "WV_ReportingData"
+# DEFINE the location of this dbf file. I think it was created by Mike from the tabular data in the gdb.
+dataTab = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\Reporting_Data_GDB\\reportingData.dbf"
 
+hex_id_field = "AUSPATID"
+template_layer = shapefile_directory + "hex_template\\PU_grid_template.shp"
+input_shape = shapefile_directory + gdb_poly
+input_pol = input_shape + ".shp"
+output_name = "PU_grid_test"
+hex_name = shapefile_directory + output_name
+hex_pol = hex_name + ".shp"
+workspace = shapefile_directory
+arcpy.env.workspace = workspace
 
 #init the field vars
 modField = ""
 obsField = ""
 habsField = ""
 fishField = ""
-#need to constrain it to just a few records at first
-#this should be a cursor
 
-#set the feature class name and data table name
-hex_pol = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\Reporting_Data_GDB\\wv_hex.shp"
-# and the fields to update
-field1 = "mod_spec"
-field2 = "obs_spec"
-field3 = "habitat"
-field4 = "fish"
+### END SETTINGS ###
 
-dataTab = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\Reporting_Data_GDB\\reportingData.dbf"
+#Create new shapefile:
+#1. Delete old files
+for match in glob.glob(hex_name+'.*'):
+	os.remove(match)
+		
+for match in glob.glob(input_shape+'.*'):
+	os.remove(match)
 
-hex_id_field = "AUSPATID"
+#2. Set the correct output coordinate system
+arcpy.env.outputCoordinateSystem = arcpy.SpatialReference("WGS 1984 Web Mercator (Auxiliary Sphere)")
+	
+#3. Create the empty file from the template
+arcpy.CreateFeatureclass_management(shapefile_directory, output_name, "POLYGON", template_layer)
 
-hexCursor = arcpy.UpdateCursor(hex_pol)
+#4. Populate the unagregated rows from the input gdb
+arcpy.CopyFeatures_management(gdb_poly,input_shape)
+
+# the '.da' cursors were added in 10.1. If running an older Arc version, use the lines without the '.da' instead
+#inputCursor = arcpy.UpdateCursor(input_pol)
+#hexInCursor = arcpy.InsertCursor(hex_pol)
+inputCursor = arcpy.da.UpdateCursor(input_pol)
+hexInCursor = arcpy.da.InsertCursor(hex_pol)
+
+for inputRow in inputCursor:
+	row = hexInCursor.newRow()
+	row.setValue("SHAPE", inputRow.getValue('SHAPE'))
+	row.setValue("Hex_ID", inputRow.getValue('Hex_ID'))
+	row.setValue("AUSPATID", inputRow.getValue('AUSPATID'))
+	row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
+	row.setValue("COA_Name", inputRow.getValue('COA_Name'))
+	hexInCursor.insertRow(row)
+	
+del row
+del hexInCursor
+
+#5. Pivot logic
+# the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
+#hexCursor = arcpy.UpdateCursor(hex_pol)
+hexCursor = arcpy.da.UpdateCursor(hex_pol)
+
 for hexRow in hexCursor:
 	hex = hexRow.getValue(hex_id_field)
-	dataTab = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\Reporting_Data_GDB\\reportingData.dbf"
 	field = "COMNAME"
 	sp_id = "MarxanID"
 	
@@ -99,11 +154,11 @@ for hexRow in hexCursor:
 	habsField = habsField.strip( ',' )
 	fishField = fishField.strip( ',' )
 	
-	hexRow.setValue(field1, modField)
-	hexRow.setValue(field2, obsField)
-	hexRow.setValue(field3, habsField)
-	hexRow.setValue(field4, fishField)
+	hexRow.setValue("mod_spec", modField)
+	hexRow.setValue("obs_spec", obsField)
+	hexRow.setValue("habitat", habsField)
+	hexRow.setValue("fish", fishField)
 
 	hexCursor.updateRow(hexRow)
-	#hexRow = hexCursor.next()
+
 
