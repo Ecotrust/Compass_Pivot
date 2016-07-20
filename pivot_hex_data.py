@@ -62,24 +62,33 @@ hex_id_field = "AUSPATID"
 template_layer = shapefile_directory + "hex_template\\PU_grid_template.shp"
 input_shape = shapefile_directory + gdb_poly
 input_pol = input_shape + ".shp"
-output_name = "PU_grid_test"
+output_name = "PU_grid"
 hex_name = shapefile_directory + output_name
 hex_pol = hex_name + ".shp"
 workspace = shapefile_directory
 arcpy.env.workspace = workspace
+arcpy.env.overwriteOutput = True
 common_name_field = "COMNAME"
 species_id = "MarxanID"
 
-#init the field vars
-modField = ""
-obsField = ""
-habsField = ""
-fishField = ""
-
 ### END SETTINGS ###
+
+### Edited from StacyR: http://gis.stackexchange.com/questions/31034/remove-lock-on-feature-class 
+def clearWSLocks(inputWS):
+  '''Attempts to clear locks on a workspace, returns stupid message.'''
+  if all([
+	arcpy.Exists(inputWS), arcpy.Delete_management(inputWS), arcpy.Exists(inputWS)]):
+    return 'Workspace (%s) clear to continue...' % inputWS
+  else:
+    return '!!!!!!!! ERROR WITH WORKSPACE %s !!!!!!!!' % inputWS
 
 #Create new shapefile:
 #1. Delete old files
+print("Delete old files")
+clearWSLocks(input_shape)
+clearWSLocks(hex_name)
+clearWSLocks(shapefile_directory+output_name)
+#print(clearWSLocks(shapefile_directory))
 for match in glob.glob(hex_name+'.*'):
 	os.remove(match)
 		
@@ -87,28 +96,35 @@ for match in glob.glob(input_shape+'.*'):
 	os.remove(match)
 
 #2. Set the correct output coordinate system
+print("Set coord system")
 arcpy.env.outputCoordinateSystem = arcpy.SpatialReference("WGS 1984 Web Mercator (Auxiliary Sphere)")
 	
 #3. Create the empty file from the template
-arcpy.CreateFeatureclass_management(shapefile_directory, output_name, "POLYGON", template_layer)
+print("Create target file from template")
+workfiles = arcpy.CreateFeatureclass_management(shapefile_directory, output_name, "POLYGON", template_layer)
+
 
 #4. Populate the unagregated rows from the input gdb
+print("Populate target file rows")
 arcpy.CopyFeatures_management(gdb_poly,input_shape)
+clearWSLocks(shapefile_directory+output_name)
+clearWSLocks(input_shape)
 
 # the '.da' cursors were added in 10.1. If running an older Arc version, use the lines without the '.da' instead
-#inputCursor = arcpy.UpdateCursor(input_pol)
-#hexInCursor = arcpy.InsertCursor(hex_pol)
+inputCursor = arcpy.UpdateCursor(input_pol)
+hexInCursor = arcpy.InsertCursor(hex_pol)
 fields = ['SHAPE','Hex_ID','AUSPATID','ECOREGION','COA_Name']
-inputCursor = arcpy.da.UpdateCursor(input_pol, ['FID'] + fields)
-hexInCursor = arcpy.da.InsertCursor(hex_pol, ['OBJECTID'] + fields)
+#inputCursor = arcpy.da.UpdateCursor(input_pol, ['FID'] + fields)
+#hexInCursor = arcpy.da.InsertCursor(hex_pol, ['OBJECTID'] + fields)
 
 for inputRow in inputCursor:
-	#row = hexInCursor.newRow()
-	#row.setValue("SHAPE", inputRow.getValue('SHAPE'))
-	#row.setValue("Hex_ID", inputRow.getValue('Hex_ID'))
-	#row.setValue("AUSPATID", inputRow.getValue('AUSPATID'))
-	#row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
-	#row.setValue("COA_Name", inputRow.getValue('COA_Name'))
+	row = hexInCursor.newRow()
+	row.setValue("OBJECTID", inputRow.getValue('FID'))
+	row.setValue("SHAPE", inputRow.getValue('SHAPE'))
+	row.setValue("Hex_ID", inputRow.getValue('Hex_ID'))
+	row.setValue("AUSPATID", inputRow.getValue('AUSPATID'))
+	row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
+	row.setValue("COA_Name", inputRow.getValue('COA_Name'))
 	#row_values = (
 	#	inputRow.getValue('SHAPE'), 
 	#	inputRow.getValue('Hex_ID'), 
@@ -116,59 +132,92 @@ for inputRow in inputCursor:
 	#	inputRow.getValue('ECOREGION'), 
 	#	inputRow.getValue('COA_Name')
 	#)
-	hexInCursor.insertRow(inputRow)
+	#hexInCursor.insertRow(inputRow)
+	hexInCursor.insertRow(row)
 	
-#del row
+del row
 del hexInCursor
 del inputCursor
 
 #5. Pivot logic
+error_count = 0
+error_max = 10
+
+# the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
+#dataCursor = arcpy.SearchCursor(dataTab, "AUSPATID = " + str(hex))
+#dataCursor = arcpy.da.SearchCursor(dataTab,[common_name_field, species_id],"AUSPATID = " + str(hex))
+dataCursor = arcpy.da.UpdateCursor(dataTab,[common_name_field, "AUSPATID", species_id])
+
+reportDict = {}
+
+for row in dataCursor:
+	#comName = row.getValue(common_name_field)
+	#specId = row.getValue(species_id)
+	comName = row[0]
+	hexId = str(row[1])
+	specId = row[2]
+	
+	if hexId not in reportDict.keys():
+		reportDict[hexId] = {
+			"modField": "",
+			"obsField": "",
+			"habsField": "",
+			"fishField": ""
+		}
+		
+	hex = reportDict[hexId]
+	
+	#now we need to determine how to handle the record and 
+	cleanComName = comName.split("(", 1)  #this is now a list
+	
+	#need to test the length of the list (if there's no "(" there's only one element")
+	if len(cleanComName) > 1:
+		if cleanComName[1] == "Modeled Habitat)":
+			hex['modField'] = hex['modField'] + "," + str(specId)
+		else:
+			if cleanComName[1] == "Observed)":
+				hex['obsField'] = hex['obsField'] + "," + str(specId)
+			else:
+				print("--- Clean Common Name not understood: %s ---" % cleanComName[1])
+				error_count = error_count +1
+				if error_count >= error_max:
+					print("=== TOO MANY ERRORS. ABORTING. ===")
+					quit()
+	else:
+		#first check to see if it's a habitat (starts with "OCS")
+		habyes = comName[:3]
+		if habyes == "OCS":
+			hex['habsField'] = hex['habsField'] + "," + str(specId)
+		else:
+			hex['fishField'] = hex['fishField'] + "," + str(specId)
+		
+	#row = dataCursor.next()
+del dataCursor
+	
 # the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
 hexCursor = arcpy.UpdateCursor(hex_pol)
 #hexRowFields = [hex_id_field,"mod_spec","obs_spec","habitat","fish"]
 #hexCursor = arcpy.da.UpdateCursor(hex_pol,'*')
 
+run_count = 0
 for hexRow in hexCursor:
 	#hex = hexRow[0]
 	hex = hexRow.getValue(hex_id_field)
+	hexDict = reportDict[str(hex)]
 
-	# the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
-	dataCursor = arcpy.SearchCursor(dataTab, "AUSPATID = " + str(hex))
-	#dataCursor = arcpy.da.SearchCursor(dataTab,[common_name_field, species_id],"AUSPATID = " + str(hex))
-	for row in dataCursor:
-		t = row.getValue(common_name_field)
-		I = row.getValue(species_id)
-		#t = row[0]
-		#I = row[1]
-		#now we need to determine how to handle the record and 
-		s = t.split("(", 1)  #this is now a list
-		
-		#need to test the length of the list (if there's no "(" there's only one element")
-		if len(s) > 1:
-			if s[1] == "Modeled Habitat)":
-				modField = modField + "," + str(I)
-			if s[1] == "Observed":
-				obsField = obsField + "," + str(I)
-		else:
-			#first check to see if it's a habitat (starts with "OCS")
-			habyes = t[:3]
-			if habyes == "OCS":
-				habsField = habsField + "," + str(I)
-			else:
-				fishField = fishField + "," + str(I)
-			
-		row = dataCursor.next()
-		
+	if run_count % 1000 == 0:
+		print("Run count: %s" % run_count)
+	
 	#print (str(hex) + ":" + modField + "\n")
 	#print (str(hex) + ":" + obsField + "\n")
 	#print (str(hex) + ":" + habsField + "\n")
 	#print (str(hex) + ":" + fishField + "\n")
 	
 	#need to strip the , from beggining of each
-	modField = modField.strip( ',' )
-	obsField = obsField.strip( ',' )
-	habsField = habsField.strip( ',' )
-	fishField = fishField.strip( ',' )
+	modField = hexDict['modField'].strip( ',' )
+	obsField = hexDict['obsField'].strip( ',' )
+	habsField = hexDict['habsField'].strip( ',' )
+	fishField = hexDict['fishField'].strip( ',' )
 	
 	hexRow.setValue("mod_spec", modField)
 	hexRow.setValue("obs_spec", obsField)
@@ -180,10 +229,30 @@ for hexRow in hexCursor:
 	#hexRow[4] = fishField
 
 	hexCursor.updateRow(hexRow)
+	
+	run_count = run_count + 1
+	
 del hexCursor
 
 #6. zip up shapefile
-with zipfile.ZipFile(output_name+'.zip', 'w') as shapezip:
-	for match in glob.glob(hex_name+'.*'):
-		shapezip.write(match)
+print("Writing zip file")
+try:
+    import zlib
+    compression = zipfile.ZIP_DEFLATED
+except:
+    compression = zipfile.ZIP_STORED
+
+shapezip = zipfile.ZipFile(shapefile_directory+output_name+'.zip', mode='w')
+zipcount = 0
+for match in glob.glob(hex_name+'.*'):
+	filename = match.split(shapefile_directory)[1]
+	if 'lock' not in filename and 'zip' not in filename:
+		print('writing %s, loop %s' % (filename, zipcount))
+		shapezip.write(match, filename, compress_type=compression)
+	zipcount = zipcount + 1
+print("Closing zipfile")
+shapezip.close()
+
+print("Cleanup?")
+del workfiles
 
