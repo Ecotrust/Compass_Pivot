@@ -42,6 +42,7 @@ import os
 import time
 import datetime
 import glob
+import zipfile
 
 
 ### SETTINGS ###
@@ -181,4 +182,8 @@ for hexRow in hexCursor:
 	hexCursor.updateRow(hexRow)
 del hexCursor
 
+#6. zip up shapefile
+with zipfile.ZipFile(output_name+'.zip', 'w') as shapezip:
+	for match in glob.glob(hex_name+'.*'):
+		shapezip.write(match)
 
