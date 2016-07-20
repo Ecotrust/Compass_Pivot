@@ -66,6 +66,8 @@ hex_name = shapefile_directory + output_name
 hex_pol = hex_name + ".shp"
 workspace = shapefile_directory
 arcpy.env.workspace = workspace
+common_name_field = "COMNAME"
+species_id = "MarxanID"
 
 #init the field vars
 modField = ""
@@ -95,35 +97,48 @@ arcpy.CopyFeatures_management(gdb_poly,input_shape)
 # the '.da' cursors were added in 10.1. If running an older Arc version, use the lines without the '.da' instead
 #inputCursor = arcpy.UpdateCursor(input_pol)
 #hexInCursor = arcpy.InsertCursor(hex_pol)
-inputCursor = arcpy.da.UpdateCursor(input_pol)
-hexInCursor = arcpy.da.InsertCursor(hex_pol)
+fields = ['SHAPE','Hex_ID','AUSPATID','ECOREGION','COA_Name']
+inputCursor = arcpy.da.UpdateCursor(input_pol, ['FID'] + fields)
+hexInCursor = arcpy.da.InsertCursor(hex_pol, ['OBJECTID'] + fields)
 
 for inputRow in inputCursor:
-	row = hexInCursor.newRow()
-	row.setValue("SHAPE", inputRow.getValue('SHAPE'))
-	row.setValue("Hex_ID", inputRow.getValue('Hex_ID'))
-	row.setValue("AUSPATID", inputRow.getValue('AUSPATID'))
-	row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
-	row.setValue("COA_Name", inputRow.getValue('COA_Name'))
-	hexInCursor.insertRow(row)
+	#row = hexInCursor.newRow()
+	#row.setValue("SHAPE", inputRow.getValue('SHAPE'))
+	#row.setValue("Hex_ID", inputRow.getValue('Hex_ID'))
+	#row.setValue("AUSPATID", inputRow.getValue('AUSPATID'))
+	#row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
+	#row.setValue("COA_Name", inputRow.getValue('COA_Name'))
+	#row_values = (
+	#	inputRow.getValue('SHAPE'), 
+	#	inputRow.getValue('Hex_ID'), 
+	#	inputRow.getValue('AUSPATID'), 
+	#	inputRow.getValue('ECOREGION'), 
+	#	inputRow.getValue('COA_Name')
+	#)
+	hexInCursor.insertRow(inputRow)
 	
-del row
+#del row
 del hexInCursor
+del inputCursor
 
 #5. Pivot logic
 # the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
-#hexCursor = arcpy.UpdateCursor(hex_pol)
-hexCursor = arcpy.da.UpdateCursor(hex_pol)
+hexCursor = arcpy.UpdateCursor(hex_pol)
+#hexRowFields = [hex_id_field,"mod_spec","obs_spec","habitat","fish"]
+#hexCursor = arcpy.da.UpdateCursor(hex_pol,'*')
 
 for hexRow in hexCursor:
+	#hex = hexRow[0]
 	hex = hexRow.getValue(hex_id_field)
-	field = "COMNAME"
-	sp_id = "MarxanID"
-	
+
+	# the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
 	dataCursor = arcpy.SearchCursor(dataTab, "AUSPATID = " + str(hex))
+	#dataCursor = arcpy.da.SearchCursor(dataTab,[common_name_field, species_id],"AUSPATID = " + str(hex))
 	for row in dataCursor:
-		t = row.getValue(field)
-		I = row.getValue(sp_id)
+		t = row.getValue(common_name_field)
+		I = row.getValue(species_id)
+		#t = row[0]
+		#I = row[1]
 		#now we need to determine how to handle the record and 
 		s = t.split("(", 1)  #this is now a list
 		
@@ -158,7 +173,12 @@ for hexRow in hexCursor:
 	hexRow.setValue("obs_spec", obsField)
 	hexRow.setValue("habitat", habsField)
 	hexRow.setValue("fish", fishField)
+	#hexRow[1] = modField
+	#hexRow[2] = obsField
+	#hexRow[3] = habsField
+	#hexRow[4] = fishField
 
 	hexCursor.updateRow(hexRow)
+del hexCursor
 
 
