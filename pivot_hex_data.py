@@ -1,6 +1,7 @@
 """
 Name: pivot_hex_data.py
 Created by: Mike Mertens, 06/2016
+Maintained by: Ryan Hodges, 07/2016
 Description: Used to pivot the species table associated with
 	marxan hexes so there is a one to one relationship with a list
 	of species modeled or observed
@@ -55,13 +56,12 @@ input_gdb = "ODFW_OCS_ReportingData.gdb"
 gdb_poly = "WV_Hexagons"
 # DEFINE the name of the tabular data in the GDB
 gdb_data = "WV_ReportingData"
-# DEFINE the location of this dbf file. I think it was created by Mike from the tabular data in the gdb.
-dataTab = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\Reporting_Data_GDB\\reportingData.dbf"
+
 
 hex_id_field = "AUSPATID"
 template_layer = shapefile_directory + "hex_template\\PU_grid_template.shp"
-input_shape = shapefile_directory + gdb_poly
-input_pol = input_shape + ".shp"
+input_pol = shapefile_directory + input_gdb + "\\" + gdb_poly
+input_table = shapefile_directory + input_gdb + "\\" + gdb_data
 output_name = "PU_grid"
 hex_name = shapefile_directory + output_name
 hex_pol = hex_name + ".shp"
@@ -85,15 +85,11 @@ def clearWSLocks(inputWS):
 #Create new shapefile:
 #1. Delete old files
 print("Delete old files")
-clearWSLocks(input_shape)
 clearWSLocks(hex_name)
 clearWSLocks(shapefile_directory+output_name)
 for match in glob.glob(hex_name+'.*'):
 	os.remove(match)
-		
-for match in glob.glob(input_shape+'.*'):
-	os.remove(match)
-
+	
 #2. Set the correct output coordinate system
 print("Set coord system")
 arcpy.env.outputCoordinateSystem = arcpy.SpatialReference("WGS 1984 Web Mercator (Auxiliary Sphere)")
@@ -105,24 +101,23 @@ workfiles = arcpy.CreateFeatureclass_management(shapefile_directory, output_name
 
 #4. Populate the unagregated rows from the input gdb
 print("Populate target file rows")
-arcpy.CopyFeatures_management(gdb_poly,input_shape)
 clearWSLocks(shapefile_directory+output_name)
-clearWSLocks(input_shape)
 
-inputCursor = arcpy.UpdateCursor(input_pol)
+#fields = ['OBJECTID','SHAPE','Hex_ID','AUSPATID','ECOREGION','COA_Name']
+
+inputCursor = arcpy.SearchCursor(input_pol)
 hexInCursor = arcpy.InsertCursor(hex_pol)
-fields = ['SHAPE','Hex_ID','AUSPATID','ECOREGION','COA_Name']
 
 for inputRow in inputCursor:
 	row = hexInCursor.newRow()
-	row.setValue("OBJECTID", inputRow.getValue('FID'))
+	row.setValue("OBJECTID", inputRow.getValue('OBJECTID'))
 	row.setValue("SHAPE", inputRow.getValue('SHAPE'))
 	row.setValue("Hex_ID", inputRow.getValue('Hex_ID'))
 	row.setValue("AUSPATID", inputRow.getValue('AUSPATID'))
 	row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
 	row.setValue("COA_Name", inputRow.getValue('COA_Name'))
 	hexInCursor.insertRow(row)
-	
+		
 del row
 del hexInCursor
 del inputCursor
@@ -134,13 +129,11 @@ error_max = 10
 # the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
 #dataCursor = arcpy.SearchCursor(dataTab, "AUSPATID = " + str(hex))
 #dataCursor = arcpy.da.SearchCursor(dataTab,[common_name_field, species_id],"AUSPATID = " + str(hex))
-dataCursor = arcpy.da.UpdateCursor(dataTab,[common_name_field, "AUSPATID", species_id])
+dataCursor = arcpy.da.UpdateCursor(input_table,[common_name_field, "AUSPATID", species_id])
 
 reportDict = {}
 
 for row in dataCursor:
-	#comName = row.getValue(common_name_field)
-	#specId = row.getValue(species_id)
 	comName = row[0]
 	hexId = str(row[1])
 	specId = row[2]
