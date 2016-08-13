@@ -69,7 +69,7 @@ workspace = shapefile_directory
 arcpy.env.workspace = workspace
 arcpy.env.overwriteOutput = True
 common_name_field = "COMNAME"
-species_id = "MarxanID"
+species_id = "TGTID"
 
 ### END SETTINGS ###
 
@@ -185,6 +185,13 @@ for hexRow in hexCursor:
 	habsField = str(hexDict['habsField'])
 	fishField = str(hexDict['fishField'])
 	
+	if len(modField) > 254 or len(obsField) > 254 or len(habsField) > 254 or len(fishField) > 254:
+		print("=== One of the fields for hex id %s is too long. Suggest shorter %s values ===" % (str(hex),species_id))
+		print("Length of %s: %s" % ('modeled', str(len(modField))))
+		print("Length of %s: %s" % ('observed', str(len(obsField))))
+		print("Length of %s: %s" % ('habitats', str(len(habsField))))
+		print("Length of %s: %s" % ('fish', str(len(fishField))))
+		quit()
 	hexRow.setValue("mod_spec", modField)
 	hexRow.setValue("obs_spec", obsField)
 	hexRow.setValue("habitat", habsField)
