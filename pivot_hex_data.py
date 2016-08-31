@@ -49,13 +49,17 @@ import zipfile
 ### SETTINGS ###
 
 # DEFINE where the spatial data (GDB file and template directory) is located
-shapefile_directory = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\Reporting_Data_GDB\\"
+#shapefile_directory = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\Reporting_Data_GDB\\"
+shapefile_directory = "E:\\GIS\\projects\\ODFWCompass2015\\Data\\Source\\ODFW\\CompassReportingTool_20160823\\"
 # DEFINE the name of the GDB
-input_gdb = "ODFW_OCS_ReportingData.gdb"
+#input_gdb = "ODFW_OCS_ReportingData.gdb"
+input_gdb = "CompassReportingTool_20160823.gdb"
 # DEFINE the name of the spatial layer in the GDB
-gdb_poly = "WV_Hexagons"
+#gdb_poly = "WV_Hexagons"
+gdb_poly = "HexagonBaseData"
 # DEFINE the name of the tabular data in the GDB
-gdb_data = "WV_ReportingData"
+#gdb_data = "WV_ReportingData"
+gdb_data = "OCS_RT_Data_201608"
 
 
 hex_id_field = "AUSPATID"
@@ -69,7 +73,8 @@ workspace = shapefile_directory
 arcpy.env.workspace = workspace
 arcpy.env.overwriteOutput = True
 common_name_field = "COMNAME"
-species_id = "TGTID"
+#species_id = "TGTID"
+species_id = "CompassID"
 
 ### END SETTINGS ###
 
@@ -113,7 +118,7 @@ for inputRow in inputCursor:
 	row.setValue("OBJECTID", inputRow.getValue('OBJECTID'))
 	row.setValue("SHAPE", inputRow.getValue('SHAPE'))
 	row.setValue("Hex_ID", inputRow.getValue('Hex_ID'))
-	row.setValue("AUSPATID", inputRow.getValue('AUSPATID'))
+	row.setValue("AUSPATID", inputRow.getValue('Hex_ID'))
 	row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
 	row.setValue("COA_Name", inputRow.getValue('COA_Name'))
 	hexInCursor.insertRow(row)
@@ -149,20 +154,24 @@ for row in dataCursor:
 	hex = reportDict[hexId]
 	
 	#now we need to determine how to handle the record and 
-	cleanComName = comName.split("(", 1)  #this is now a list
+	splitNameList = comName.split("(")
+	cleanComName = splitNameList[-1]  #this is now a list
 	
 	#need to test the length of the list (if there's no "(" there's only one element")
-	if len(cleanComName) > 1:
-		if cleanComName[1] == "Modeled Habitat)":
+	if len(splitNameList) > 1:
+		if cleanComName == "Modeled Habitat)":
 			hex['modField'].append(specId)
 		else:
-			if cleanComName[1] == "Observed)":
+			if cleanComName == "Observed)":
 				hex['obsField'].append(specId)
 			else:
-				print("--- Clean Common Name not understood: %s ---" % cleanComName[1])
+				print("--- Clean Common Name not understood: %s ---" % cleanComName)
 				error_count = error_count +1
 				if error_count >= error_max:
 					print("=== TOO MANY ERRORS. ABORTING. ===")
+					print("comName: %s" % comName)
+					print("cleanComName: %s" % str(cleanComName))
+					print("splitNameList: %s" % str(splitNameList))
 					quit()
 	else:
 		#first check to see if it's a habitat (starts with "OCS")
