@@ -61,7 +61,7 @@ gdb_poly = "HexagonBaseData"
 #gdb_data = "WV_ReportingData"
 gdb_data = "OCS_RT_Data_201608"
 
-
+max_loops = 0 #0 for "run all"
 hex_id_field = "AUSPATID"
 template_layer = shapefile_directory + "hex_template\\PU_grid_template.shp"
 input_pol = shapefile_directory + input_gdb + "\\" + gdb_poly
@@ -107,13 +107,18 @@ workfiles = arcpy.CreateFeatureclass_management(shapefile_directory, output_name
 #4. Populate the unagregated rows from the input gdb
 print("Populate target file rows")
 clearWSLocks(shapefile_directory+output_name)
-
+reportDict = {}
 #fields = ['OBJECTID','SHAPE','Hex_ID','AUSPATID','ECOREGION','COA_Name']
 
 inputCursor = arcpy.SearchCursor(input_pol)
 hexInCursor = arcpy.InsertCursor(hex_pol)
 
-for inputRow in inputCursor:
+for index,inputRow in enumerate(inputCursor):
+	if (index in [0,100,500,1000,5000] or index%10000==0):
+		print("Reading hex row: %d at time: %s" % (index,str(datetime.datetime.now().isoformat())))
+	if max_loops > 0 and index > max_loops:
+		print("Hit max number of iterations (%s). Breaking." % str(max_loops))
+		break
 	row = hexInCursor.newRow()
 	row.setValue("OBJECTID", inputRow.getValue('OBJECTID'))
 	row.setValue("SHAPE", inputRow.getValue('SHAPE'))
@@ -122,12 +127,23 @@ for inputRow in inputCursor:
 	row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
 	row.setValue("COA_Name", inputRow.getValue('COA_Name'))
 	hexInCursor.insertRow(row)
+	
+	# Be sure to have an entry for each hex id - otherwise we have problems later
+	hexId = inputRow.getValue('Hex_ID')
+	if hexId not in reportDict.keys():
+		reportDict[hexId] = {
+			"modField": [],
+			"obsField": [],
+			"habsField": [],
+			"fishField": []
+		}
 		
 del row
 del hexInCursor
 del inputCursor
 
 #5. Pivot logic
+print("Pivoting data into target file")
 error_count = 0
 error_max = 10
 
@@ -136,9 +152,12 @@ error_max = 10
 #dataCursor = arcpy.da.SearchCursor(dataTab,[common_name_field, species_id],"AUSPATID = " + str(hex))
 dataCursor = arcpy.da.UpdateCursor(input_table,[common_name_field, "AUSPATID", species_id])
 
-reportDict = {}
-
-for row in dataCursor:
+for index, row in enumerate(dataCursor):
+	if (index in [0,100,500,1000,5000,10000] or index%50000==0):
+		print("Reading data row: %d at time: %s" % (index,str(datetime.datetime.now().isoformat())))
+	if max_loops > 0 and index > max_loops:
+		print("Hit max number of iterations (%s). Breaking." % str(max_loops))
+		break
 	comName = row[0]
 	hexId = str(row[1])
 	specId = row[2]
@@ -185,26 +204,35 @@ del dataCursor
 	
 hexCursor = arcpy.UpdateCursor(hex_pol)
 
-for hexRow in hexCursor:
+for index, hexRow in enumerate(hexCursor):
+	if (index in [0,100,500,1000,5000] or index%10000==0):
+		print("Reading hex row: %d at time: %s" % (index,str(datetime.datetime.now().isoformat())))
+	if max_loops > 0 and index > max_loops:
+		print("Hit max number of iterations (%s). Breaking." % str(max_loops))
+		break
 	hex = hexRow.getValue(hex_id_field)
-	hexDict = reportDict[str(hex)]
-	
-	modField = str(hexDict['modField'])
-	obsField = str(hexDict['obsField'])
-	habsField = str(hexDict['habsField'])
-	fishField = str(hexDict['fishField'])
-	
-	if len(modField) > 254 or len(obsField) > 254 or len(habsField) > 254 or len(fishField) > 254:
-		print("=== One of the fields for hex id %s is too long. Suggest shorter %s values ===" % (str(hex),species_id))
-		print("Length of %s: %s" % ('modeled', str(len(modField))))
-		print("Length of %s: %s" % ('observed', str(len(obsField))))
-		print("Length of %s: %s" % ('habitats', str(len(habsField))))
-		print("Length of %s: %s" % ('fish', str(len(fishField))))
-		quit()
-	hexRow.setValue("mod_spec", modField)
-	hexRow.setValue("obs_spec", obsField)
-	hexRow.setValue("habitat", habsField)
-	hexRow.setValue("fish", fishField)
+	try:
+		hexDict = reportDict[str(hex)]
+		
+		modField = str(hexDict['modField'])
+		obsField = str(hexDict['obsField'])
+		habsField = str(hexDict['habsField'])
+		fishField = str(hexDict['fishField'])
+		
+		if len(modField) > 254 or len(obsField) > 254 or len(habsField) > 254 or len(fishField) > 254:
+			print("=== One of the fields for hex id %s is too long. Suggest shorter %s values ===" % (str(hex),species_id))
+			print("Length of %s: %s" % ('modeled', str(len(modField))))
+			print("Length of %s: %s" % ('observed', str(len(obsField))))
+			print("Length of %s: %s" % ('habitats', str(len(habsField))))
+			print("Length of %s: %s" % ('fish', str(len(fishField))))
+			quit()
+		hexRow.setValue("mod_spec", modField)
+		hexRow.setValue("obs_spec", obsField)
+		hexRow.setValue("habitat", habsField)
+		hexRow.setValue("fish", fishField)
+	except:
+		print('Hex ID %s not found - skipping.' % str(hex))
+		pass
 
 	hexCursor.updateRow(hexRow)
 	
