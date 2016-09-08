@@ -61,7 +61,7 @@ gdb_poly = "HexagonBaseData"
 #gdb_data = "WV_ReportingData"
 gdb_data = "OCS_RT_Data_201608"
 #DEFINE the name of the created zip file - all shapefiles MUST have a specific name, but the zipped file can be more descriptive
-output_zip_name = "PU_grid_stripped_full_20160908"
+output_zip_name = "PU_grid"
 
 max_loops = 0 #0 for "run all"
 hex_id_field = "AUSPATID"
@@ -152,7 +152,7 @@ error_max = 10
 # the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
 #dataCursor = arcpy.SearchCursor(dataTab, "AUSPATID = " + str(hex))
 #dataCursor = arcpy.da.SearchCursor(dataTab,[common_name_field, species_id],"AUSPATID = " + str(hex))
-dataCursor = arcpy.da.UpdateCursor(input_table,[common_name_field, "AUSPATID", species_id],None,None,False,(None, "ORDER BY AUSPATID ASC"))
+dataCursor = arcpy.da.UpdateCursor(input_table,[common_name_field, "AUSPATID", species_id])
 
 for index, row in enumerate(dataCursor):
 	if (index in [0,100,500,1000,5000,10000] or index%50000==0):
