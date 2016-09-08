@@ -60,6 +60,8 @@ gdb_poly = "HexagonBaseData"
 # DEFINE the name of the tabular data in the GDB
 #gdb_data = "WV_ReportingData"
 gdb_data = "OCS_RT_Data_201608"
+#DEFINE the name of the created zip file - all shapefiles MUST have a specific name, but the zipped file can be more descriptive
+output_zip_name = "PU_grid_stripped_full_20160908"
 
 max_loops = 0 #0 for "run all"
 hex_id_field = "AUSPATID"
@@ -125,7 +127,7 @@ for index,inputRow in enumerate(inputCursor):
 	row.setValue("Hex_ID", inputRow.getValue('Hex_ID'))
 	row.setValue("AUSPATID", inputRow.getValue('Hex_ID'))
 	row.setValue("ECOREGION", inputRow.getValue('ECOREGION'))
-	row.setValue("COA_Name", inputRow.getValue('COA_Name'))
+	row.setValue("COA_Name", inputRow.getValue('COA_RT'))
 	hexInCursor.insertRow(row)
 	
 	# Be sure to have an entry for each hex id - otherwise we have problems later
@@ -150,7 +152,7 @@ error_max = 10
 # the '.da' cursors were added in 10.1. If running an older Arc version, use the line without the '.da' instead
 #dataCursor = arcpy.SearchCursor(dataTab, "AUSPATID = " + str(hex))
 #dataCursor = arcpy.da.SearchCursor(dataTab,[common_name_field, species_id],"AUSPATID = " + str(hex))
-dataCursor = arcpy.da.UpdateCursor(input_table,[common_name_field, "AUSPATID", species_id])
+dataCursor = arcpy.da.UpdateCursor(input_table,[common_name_field, "AUSPATID", species_id],None,None,False,(None, "ORDER BY AUSPATID ASC"))
 
 for index, row in enumerate(dataCursor):
 	if (index in [0,100,500,1000,5000,10000] or index%50000==0):
@@ -214,11 +216,10 @@ for index, hexRow in enumerate(hexCursor):
 	try:
 		hexDict = reportDict[str(hex)]
 		
-		modField = str(hexDict['modField'])
-		obsField = str(hexDict['obsField'])
-		habsField = str(hexDict['habsField'])
-		fishField = str(hexDict['fishField'])
-		
+		modField = str(hexDict['modField']).replace(" ","")
+		obsField = str(hexDict['obsField']).replace(" ","")
+		habsField = str(hexDict['habsField']).replace(" ","")
+		fishField = str(hexDict['fishField']).replace(" ","")
 		if len(modField) > 254 or len(obsField) > 254 or len(habsField) > 254 or len(fishField) > 254:
 			print("=== One of the fields for hex id %s is too long. Suggest shorter %s values ===" % (str(hex),species_id))
 			print("Length of %s: %s" % ('modeled', str(len(modField))))
@@ -246,7 +247,7 @@ try:
 except:
     compression = zipfile.ZIP_STORED
 
-shapezip = zipfile.ZipFile(shapefile_directory+output_name+'.zip', mode='w')
+shapezip = zipfile.ZipFile(shapefile_directory+output_zip_name+'.zip', mode='w')
 zipcount = 0
 for match in glob.glob(hex_name+'.*'):
 	filename = match.split(shapefile_directory)[1]
