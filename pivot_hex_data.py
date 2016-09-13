@@ -30,8 +30,10 @@ The hex polygon feature set should have the appropriate fields to store the resu
 Running this script:
 	* Update the 'DEFINE' sections of the 'SETTINGS' below
 	* copy hex_template from this dir to 'shapefile_directory' as defined below
+		* the entire hex_template directory should be in the same directory as the .gdb directory
 	* Open a project in ArcMap
 	* Open gdb adding the 'gdb_poly' and 'gdb_data' files defined below
+		*Add these layers to ArcMAP document ("Table of Contents -> Layers")
 	* open Python Terminal
 	* run `execfile(r'\\neoterra\GIS\projects\ODFWCompass2015\Util\Scripts_Models\Compass_Pivot\pivot_hex_data.py')`
 	* NOTE: the location of the file will change in the above command.
@@ -63,6 +65,7 @@ gdb_data = "OCS_RT_Data_201608"
 #DEFINE the name of the created zip file - all shapefiles MUST have a specific name, but the zipped file can be more descriptive
 output_zip_name = "PU_grid"
 
+#DEFINE: for a sub-run of x hexes, set val to x (a number) - 0 for full run.
 max_loops = 0 #0 for "run all"
 hex_id_field = "AUSPATID"
 template_layer = shapefile_directory + "hex_template\\PU_grid_template.shp"
